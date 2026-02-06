@@ -8,7 +8,10 @@ const ASSETS = [
   'https://cdn.pixabay.com/audio/2022/03/10/audio_784d168582.mp3',
   'https://cdn.pixabay.com/audio/2021/08/04/audio_0625c1539c.mp3'
 ];
-
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('fetch', (event) => {
+  event.respondWith(fetch(event.request));
+});
 // Installs the service worker and caches your original assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
