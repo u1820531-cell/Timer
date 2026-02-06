@@ -9,12 +9,7 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "icon-512.png",
+      "src": "https://www.flaticon.com/free-icon/clock_16110393?term=timer+clock&page=1&position=31&origin=search&related_id=16110393"
       "sizes": "512x512",
       "type": "image/png"
     }
