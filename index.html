@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Zen Abyss v16 - Visual Pulse & Audio Fix</title>
+  <style>
+    :root { --sand: #00d2ff; --glow: rgba(0, 210, 255, 0.5); }
+    body { margin: 0; background: #00050a; color: white; font-family: 'Inter', sans-serif; overflow: hidden; cursor: crosshair; transition: background-color 1s; }
+    
+    canvas { position: fixed; top: 0; left: 0; pointer-events: none; will-change: transform; }
+    #nebulaCanvas { z-index: 1; filter: blur(50px); opacity: 0.6; }
+    #starCanvas { z-index: 2; } 
+    #creatureCanvas { z-index: 3; } 
+    #timerCanvas { z-index: 4; }
+
+    .ui-layer {
+      position: absolute; top: 0; width: 100%; height: 100%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+
+    .glass-card {
+      pointer-events: auto; background: rgba(0, 15, 30, 0.4);
+      backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px);
+      padding: 30px; border-radius: 40px;
+      border: 1px solid rgba(0, 210, 255, 0.2); width: 85%; max-width: 360px; text-align: center;
+      box-shadow: 0 40px 100px rgba(0,0,0,0.8);
+    }
+
+    input, button {
+      width: 100%; margin: 8px 0; padding: 12px; border-radius: 15px;
+      border: 1px solid rgba(255,255,255,0.1); background: rgba(0,10,20,0.8); color: white;
+      font-size: 13px; transition: 0.3s; outline: none; box-sizing: border-box;
+    }
+    button { background: var(--sand); color: #000; font-weight: 800; border: none; cursor: pointer; text-transform: uppercase; }
+    button:hover { transform: scale(1.02); box-shadow: 0 0 25px var(--glow); }
+    
+    #timeText { font-size: 2.8rem; font-weight: 200; margin: 15px 0; font-variant-numeric: tabular-nums; text-shadow: 0 0 15px var(--glow); }
+    .zen-mode .hide-ui { opacity: 0; transform: translateY(30px); pointer-events: none; }
+    .hide-ui { transition: all 1s cubic-bezier(0.19, 1, 0.22, 1); }
+    
+    #statusMsg { font-size: 10px; color: #00d2ff; height: 12px; margin-top: 5px; }
+    #sessionLog { font-size: 11px; margin-top: 15px; color: rgba(0, 210, 255, 0.6); }
+    
+    /* The Flash Effect */
+    .zen-pulse { animation: pulseFlash 2s ease-out; }
+    @keyframes pulseFlash {
+      0% { background-color: #00050a; }
+      10% { background-color: #004b5c; }
+      100% { background-color: #00050a; }
+    }
+  </style>
+</head>
+<body id="mainBody">
+
+<canvas id="nebulaCanvas"></canvas>
+<canvas id="starCanvas"></canvas>
+<canvas id="creatureCanvas"></canvas>
+<canvas id="timerCanvas"></canvas>
+
+<div class="ui-layer">
+  <div class="glass-card">
+    <h2 style="letter-spacing: 10px; font-weight: 200; margin: 0; color: #00d2ff;">ABYSS</h2>
+    
+    <div id="uiControls" class="hide-ui">
+      <input type="datetime-local" id="targetDate">
+      <button id="startBtn" onclick="startVoyage()">START SUBMERGE</button>
+      <div id="statusMsg"></div>
+    </div>
+
+    <div id="timeText">00:00:00</div>
+    <div id="sessionLog">Total Abyss Time: 0m</div>
+    
+    <div id="postZenControls" style="display:none;">
+       <button onclick="resetAbyss()" style="background: rgba(0,210,255,0.2); color: #00d2ff; border: 1px solid #00d2ff;">NEW VOYAGE</button>
+    </div>
+
+    <button onclick="document.body.classList.toggle('zen-mode')" style="background:none; border: 1px solid rgba(0,210,255,0.3); color: #00d2ff; font-size: 10px; width: auto; padding: 8px 16px; margin-top: 10px;">TOGGLE ZEN</button>
+  </div>
+</div>
+
+<audio id="chimeAudio" src="https://assets.mixkit.co/sfx/preview/mixkit-magical-bell-ding-585.mp3"></audio>
+
+<script>
+  const canvases = ['nebula', 'star', 'creature', 'timer'];
+  const ctxs = {};
+  canvases.forEach(id => ctxs[id] = document.getElementById(id + 'Canvas').getContext('2d'));
+
+  let w, h, targetTime = 0, startTime = 0, totalMinutesLogged = 0;
+  let progress = 0, active = false, completed = false;
+  let bubbles = [], fish = [], jellies = [];
+  let mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+  let sonarRadius = 0;
+
+  function init() {
+    w = window.innerWidth; h = window.innerHeight;
+    canvases.forEach(id => {
+      const c = document.getElementById(id + 'Canvas');
+      c.width = w; c.height = h;
+    });
+
+    bubbles = Array.from({ length: 60 }, () => ({
+      x: Math.random() * w, y: Math.random() * h,
+      size: Math.random() * 2 + 1, speed: Math.random() * 0.4 + 0.1,
+      opacity: Math.random()
+    }));
+
+    fish = Array.from({ length: 12 }, () => ({
+      x: Math.random() * w, y: Math.random() * h,
+      size: Math.random() * 3 + 2, angle: Math.random() * Math.PI * 2,
+      speed: Math.random() * 1.5 + 0.8,
+      color: Math.random() > 0.8 ? '#FF8C00' : '#00d2ff'
+    }));
+
+    jellies = Array.from({ length: 4 }, () => ({
+      x: Math.random() * w, y: Math.random() * h,
+      size: Math.random() * 15 + 10, pulse: Math.random() * Math.PI,
+      speed: Math.random() * 0.4 + 0.15
+    }));
+  }
+
+  function startVoyage() {
+    const v = document.getElementById('targetDate').value;
+    const msg = document.getElementById('statusMsg');
+
+    if (!v) { alert('Select a time first'); return; }
+    targetTime = new Date(v).getTime();
+    startTime = Date.now();
+    
+    if (targetTime <= startTime) { alert('Please select a future time'); return; }
+
+    if (window.AudioContext || window.webkitAudioContext) {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    completed = false;
+    progress = 0;
+    sonarRadius = 0;
+    active = true;
+    document.getElementById('postZenControls').style.display = 'none';
+    msg.innerText = 'Submerged in silence...';
+    setTimeout(() => msg.innerText = '', 3000);
+  }
+
+  function resetAbyss() {
+      active = false;
+      completed = false;
+      progress = 0;
+      document.getElementById('timeText').innerText = '00:00:00';
+      document.getElementById('uiControls').style.opacity = '1';
+      document.getElementById('uiControls').style.pointerEvents = 'auto';
+      document.getElementById('postZenControls').style.display = 'none';
+      document.getElementById('mainBody').classList.remove('zen-pulse');
+  }
+
+  function drawWorld() {
+    const time = Date.now() * 0.0002;
+    const n = ctxs.nebula, s = ctxs.star;
+    n.clearRect(0, 0, w, h);
+    const g = n.createRadialGradient(w/2, h/2, 0, w/2, h/2, w);
+    g.addColorStop(0, `hsla(${195 + Math.sin(time) * 10}, 60%, 5%, 1)`);
+    g.addColorStop(1, '#000205');
+    n.fillStyle = g; n.fillRect(0, 0, w, h);
+
+    s.clearRect(0, 0, w, h);
+    bubbles.forEach(b => {
+      b.y -= b.speed; if (b.y < -10) b.y = h + 10;
+      s.fillStyle = `rgba(180,240,255,${0.1 + Math.abs(Math.sin(time*2 + b.opacity)) * 0.2})`;
+      s.beginPath(); s.arc(b.x, b.y, b.size, 0, Math.PI * 2); s.fill();
+    });
+  }
+
+  function drawCreatures() {
+    const c = ctxs.creature;
+    c.clearRect(0, 0, w, h);
+    const speedMultiplier = completed ? 4 : 1;
+
+    fish.forEach(f => {
+      const dx = mouse.x - f.x, dy = mouse.y - f.y;
+      if (Math.hypot(dx, dy) < 150) f.angle += dx > 0 ? -0.05 : 0.05;
+      f.x += Math.cos(f.angle) * (f.speed * speedMultiplier); 
+      f.y += Math.sin(f.angle) * (f.speed * speedMultiplier);
+      f.angle += (Math.random() - 0.5) * 0.04;
+      if (f.x < -40) f.x = w+40; if (f.y < -40) f.y = h+40;
+      c.save(); c.translate(f.x, f.y); c.rotate(f.angle);
+      c.fillStyle = f.color; c.shadowBlur = 10; c.shadowColor = f.color;
+      c.beginPath(); c.ellipse(0, 0, f.size * 2.5, f.size, 0, 0, Math.PI * 2); c.fill();
+      c.restore();
+    });
+
+    jellies.forEach(j => {
+      j.pulse += 0.03; j.y -= (j.speed * speedMultiplier); if (j.y < -50) j.y = h + 50;
+      const p = Math.sin(j.pulse) * 0.3 + 1;
+      c.save(); c.translate(j.x, j.y); c.strokeStyle = 'rgba(0,210,255,0.2)';
+      for (let i = -2; i <= 2; i++) {
+        c.beginPath(); c.moveTo(i * 5, 0);
+        c.bezierCurveTo(i * 7, 10, i * 4 * p, 25, i * 4, 40 * p); c.stroke();
+      }
+      c.fillStyle = 'rgba(0,210,255,0.4)';
+      c.beginPath(); c.arc(0, 0, j.size * p, Math.PI, 0); c.fill();
+      c.restore();
+    });
+
+    if (active && !completed) {
+      sonarRadius += 3; if (sonarRadius > w * 1.5) sonarRadius = 0;
+      c.beginPath(); c.arc(w / 2, h / 2, sonarRadius, 0, Math.PI * 2);
+      c.strokeStyle = `rgba(0,210,255,${Math.max(0, 0.08 - sonarRadius / (w * 2))})`;
+      c.lineWidth = 2; c.stroke();
+    }
+  }
+
+  function drawTimer() {
+    const t = ctxs.timer;
+    t.clearRect(0, 0, w, h);
+    const cx = w/2, cy = h/2, s = 150;
+    t.strokeStyle = 'rgba(0,210,255,0.15)'; t.lineWidth = 2;
+    t.beginPath(); t.moveTo(cx - 100, cy - s); t.lineTo(cx + 100, cy - s);
+    t.bezierCurveTo(cx+100, cy-20, cx+15, cy-10, cx+5, cy);
+    t.bezierCurveTo(cx+15, cy+10, cx+100, cy+20, cx+100, cy+s);
+    t.lineTo(cx - 100, cy + s); t.stroke();
+
+    if (!active || completed) return;
+    t.fillStyle = '#00d2ff'; t.shadowBlur = 15; t.shadowColor = '#00d2ff';
+    const topH = s * (1 - progress);
+    if (topH > 5) {
+      t.beginPath(); t.moveTo(cx - 95 * (1 - progress), cy - s);
+      t.lineTo(cx + 95 * (1 - progress), cy - s);
+      t.quadraticCurveTo(cx, cy - s + topH, cx, cy); t.fill();
+    }
+    const botH = s * progress;
+    t.beginPath(); t.moveTo(cx - 98, cy + s); t.lineTo(cx + 98, cy + s);
+    t.quadraticCurveTo(cx, cy + s - (botH * 1.8), cx - 98, cy + s); t.fill();
+  }
+
+  function animate() {
+    drawWorld(); drawCreatures();
+    if (active && !completed) {
+      const now = Date.now();
+      const total = Math.max(targetTime - startTime, 1);
+      progress = Math.min((now - startTime) / total, 1);
+      const diff = targetTime - now;
+      if (diff <= 0) {
+        document.getElementById('timeText').innerText = 'ZEN REACHED';
+        completed = true; 
+        
+        // Trigger Audio & Visuals
+        document.getElementById('mainBody').classList.add('zen-pulse');
+        document.getElementById('chimeAudio').play();
+        document.getElementById('postZenControls').style.display = 'block';
+
+        totalMinutesLogged += Math.round(total / 60000);
+        document.getElementById('sessionLog').innerText = `Total Abyss Time: ${totalMinutesLogged}m`;
+      } else {
+        const h_ = Math.floor(diff / 36e5), m_ = Math.floor((diff % 36e5) / 6e4), s_ = Math.floor((diff % 6e4) / 1000);
+        document.getElementById('timeText').innerText = `${h_.toString().padStart(2,'0')}:${m_.toString().padStart(2,'0')}:${s_.toString().padStart(2,'0')}`;
+      }
+    }
+    drawTimer();
+    requestAnimationFrame(animate);
+  }
+
+  window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+  window.addEventListener('touchmove', e => { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; }, { passive: true });
+  window.addEventListener('resize', init);
+  init(); animate();
+</script>
+</body>
+</html>
