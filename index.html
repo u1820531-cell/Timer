@@ -3,7 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Zen Abyss v16 - Visual Pulse & Audio Fix</title>
+  <title>Zen Abyss v17</title>
+  
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#00d2ff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
   <style>
     :root { --sand: #00d2ff; --glow: rgba(0, 210, 255, 0.5); }
     body { margin: 0; background: #00050a; color: white; font-family: 'Inter', sans-serif; overflow: hidden; cursor: crosshair; transition: background-color 1s; }
@@ -76,19 +83,29 @@
        <button onclick="resetAbyss()" style="background: rgba(0,210,255,0.2); color: #00d2ff; border: 1px solid #00d2ff;">NEW VOYAGE</button>
     </div>
 
-    <button onclick="document.body.classList.toggle('zen-mode')" style="background:none; border: 1px solid rgba(0,210,255,0.3); color: #00d2ff; font-size: 10px; width: auto; padding: 8px 16px; margin-top: 10px;">TOGGLE ZEN</button>
+    <button onclick="document.body.classList.toggle('zen-mode')" style="background:none; border: 1px solid rgba(0,210,255,0.3); color: #00d2ff; font-size: 10px; width: auto; padding: 8px 16px; margin-top: 10px;">TOGGLE UI</button>
   </div>
 </div>
 
-<audio id="chimeAudio" src="https://assets.mixkit.co/sfx/preview/mixkit-magical-bell-ding-585.mp3"></audio>
+<audio id="chimeAudio" src="https://cdn.pixabay.com/audio/2022/03/10/audio_784d168582.mp3" preload="auto"></audio>
+<audio id="victoryAudio" src="https://cdn.pixabay.com/audio/2021/08/04/audio_0625c1539c.mp3" preload="auto"></audio>
 
 <script>
+  // Service Worker Registration
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('Submerged: Service Worker active.'))
+        .catch(err => console.log('Surface failure: ', err));
+    });
+  }
+
   const canvases = ['nebula', 'star', 'creature', 'timer'];
   const ctxs = {};
   canvases.forEach(id => ctxs[id] = document.getElementById(id + 'Canvas').getContext('2d'));
 
   let w, h, targetTime = 0, startTime = 0, totalMinutesLogged = 0;
-  let progress = 0, active = false, completed = false;
+  let progress = 0, active = false, completed = false, hasPlayed = false;
   let bubbles = [], fish = [], jellies = [];
   let mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
   let sonarRadius = 0;
@@ -123,6 +140,8 @@
   function startVoyage() {
     const v = document.getElementById('targetDate').value;
     const msg = document.getElementById('statusMsg');
+    const chime = document.getElementById('chimeAudio');
+    const victory = document.getElementById('victoryAudio');
 
     if (!v) { alert('Select a time first'); return; }
     targetTime = new Date(v).getTime();
@@ -130,16 +149,19 @@
     
     if (targetTime <= startTime) { alert('Please select a future time'); return; }
 
-    if (window.AudioContext || window.webkitAudioContext) {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-    }
+    [chime, victory].forEach(a => {
+        a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(e => {});
+    });
 
     completed = false;
+    hasPlayed = false; 
     progress = 0;
     sonarRadius = 0;
     active = true;
+    
+    document.body.classList.add('zen-mode'); // Auto-hide UI on start
     document.getElementById('postZenControls').style.display = 'none';
+    document.getElementById('mainBody').classList.remove('zen-pulse');
     msg.innerText = 'Submerged in silence...';
     setTimeout(() => msg.innerText = '', 3000);
   }
@@ -147,10 +169,10 @@
   function resetAbyss() {
       active = false;
       completed = false;
+      hasPlayed = false;
       progress = 0;
       document.getElementById('timeText').innerText = '00:00:00';
-      document.getElementById('uiControls').style.opacity = '1';
-      document.getElementById('uiControls').style.pointerEvents = 'auto';
+      document.body.classList.remove('zen-mode');
       document.getElementById('postZenControls').style.display = 'none';
       document.getElementById('mainBody').classList.remove('zen-pulse');
   }
@@ -241,15 +263,20 @@
       const total = Math.max(targetTime - startTime, 1);
       progress = Math.min((now - startTime) / total, 1);
       const diff = targetTime - now;
+
       if (diff <= 0) {
         document.getElementById('timeText').innerText = 'ZEN REACHED';
         completed = true; 
-        
-        // Trigger Audio & Visuals
+        document.body.classList.remove('zen-mode');
         document.getElementById('mainBody').classList.add('zen-pulse');
-        document.getElementById('chimeAudio').play();
-        document.getElementById('postZenControls').style.display = 'block';
+        
+        if (!hasPlayed) {
+            document.getElementById('chimeAudio').play().catch(e => {});
+            document.getElementById('victoryAudio').play().catch(e => {});
+            hasPlayed = true;
+        }
 
+        document.getElementById('postZenControls').style.display = 'block';
         totalMinutesLogged += Math.round(total / 60000);
         document.getElementById('sessionLog').innerText = `Total Abyss Time: ${totalMinutesLogged}m`;
       } else {
@@ -266,5 +293,6 @@
   window.addEventListener('resize', init);
   init(); animate();
 </script>
+
 </body>
 </html>
